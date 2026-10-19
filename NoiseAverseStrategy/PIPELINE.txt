@@ -1,0 +1,35 @@
+STYLE C WINNING-CONFIG PIPELINE (data flows top to bottom)
+
+  raw Binance Vision zips
+        |
+        v
+  [data_tools/binance_convert.py]  -> <OHLCV_DIR>/*.parquet  (+ volume audit)
+  [data_tools/download_funding.py] -> <FUNDING_DIR>/*.parquet
+        |
+        v
+  [engine/tests_bias.py]  (verify causality BEFORE results)
+        |
+        v
+  [walkforward/walkforward_maker.py --force-style C]   <-- THE WINNING RUN
+        |   uses: engine.py, wf_engine.py, walkforward_vconf.py, batch_run.py
+        |   out:  maker_oos_returns_C_off5.csv (+1.17 Sharpe)
+        |         maker_chosen_combos_C_off5.csv (per-asset per-quarter combos)
+        |         maker_fill_stats_C_off5.csv (fill accounting)
+        v
+  [sizing/sized_maker_C.py]   <-- DEPLOYABLE CURVE
+        |   applies: catastrophic stop (400bps) + fixed-risk sizing (0.01%)
+        |   out: sized_C_trades.csv, sized_C_monthly_equity.csv (+0.65 Sharpe)
+        v
+  [robustness/monte_carlo_robustness.py]   <-- DEFLATE THE HEADLINE
+        |   out: mc_C.json (deflated Sharpe, luck p, concentration)
+        v
+  [training/train_recent_configs.py]   <-- FREEZE FOR FORWARD TEST
+        |   trains Style C on the most recent N days per asset
+        |   out: config_<SYMBOL>.json (x N) + _INDEX.csv  (TaQuant import format)
+        v
+  [deploy/taquant_maker_C.py]   <-- LIVE ENGINE PORT (import per-asset config, forward test)
+
+SUPPORTING ANALYSES (explain design choices, not on the critical path):
+  sizing/mfe_mae_analysis.py    -> why stop=400bps and why no take-profit
+  sizing/catastrophic_stop.py   -> stop-level tail-clipping table
+  sizing/fixed_risk_sizing.py   -> sizing realized-risk distribution
